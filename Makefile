@@ -1,5 +1,5 @@
 CFLAGS  = -Wall -pedantic -std=c99 -g
-LDFLAGS = -lSDL -lSDL_ttf
+LDFLAGS = -lSDL -lSDL_ttf -lcurl
 BINARY  = sdltable
 VERSION = 0.1
 PREFIX  = /usr/local
