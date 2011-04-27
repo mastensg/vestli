@@ -8,6 +8,13 @@
 
 #include "trafikanten.h"
 
+#define LENGTH(array) (sizeof(array) / sizeof(array[0]))
+
+static departure deps[256];
+static departure adeps[64];
+static departure bdeps[64];
+static int anumdeps;
+static int bnumdeps;
 static int sw;
 static int sh;
 static int running = 1;
@@ -20,6 +27,7 @@ static const int hfontsize = 32;
 static const int hlineheight = 1.2 * 32;
 static const int rfontsize = 48;
 static const int rlineheight = 1.2 * 48;
+static const int update_interval = 5;
 
 static SDL_Surface *screen;
 static TTF_Font *cfont;
@@ -27,12 +35,65 @@ static TTF_Font *hfont;
 static TTF_Font *rfont;
 
 static void
-draw_text(char *str, int x, int y, TTF_Font *font, SDL_Color color) {
+update_rows(void) {
+    //int numdeps = trafikanten_get_departures(deps, LENGTH(deps), "3010010");
+    int numdeps = trafikanten_get_departures(deps, LENGTH(deps), "3010360");
+    if(numdeps == -1)
+        err(1, "trafikanten_get_departures");
+
+    anumdeps = 0;
+    bnumdeps = 0;
+    for(int i = 0; i < numdeps; ++i) {
+        if(deps[i].direction == 1)
+            memcpy(&adeps[anumdeps++], &deps[i], sizeof(departure));
+        else if(deps[i].direction == 2)
+            memcpy(&bdeps[bnumdeps++], &deps[i], sizeof(departure));
+    }
+}
+
+static void
+format_time(char *str, time_t dt) {
+    char sign = '+';
+    if(dt < 0) {
+        sign = '-';
+        dt = -dt;
+    }
+
+    int minutes = dt / 60;
+    int seconds = (dt - minutes) % 60;
+
+    sprintf(str, "%c%02d:%02d", sign, minutes, seconds);
+}
+
+static SDL_Color
+row_color(time_t dt) {
+    static const threshold = 20 * 60;
+
+    float h = 1. / 3;
+    if(dt < threshold)
+        h *= ((float)dt / threshold);
+
+    float r, g, b;
+
+    if(h < 1. / 6) {
+        r = 1;
+        g = (h - 0. / 6) * 6;
+    } else {
+        r = 1 - (h - 1. / 6) * 6;
+        g = 1;
+    }
+
+    SDL_Color c = {255 * r, 255 * g, 0};
+    return c;
+}
+
+static void
+draw_text(char *str, int x, int y, TTF_Font *font, SDL_Color color, int rightalign) {
     SDL_Surface *text = TTF_RenderText_Shaded(font, str, color, bg);
 
     SDL_Rect pos = {x, y};
-    if(x == -1)
-        pos.x = sw - text->w;
+    if(rightalign)
+        pos.x -= text->w;
 
     SDL_BlitSurface(text, NULL, screen, &pos);
     SDL_FreeSurface(text);
@@ -49,19 +110,30 @@ draw_clock(void) {
     if(strftime(str, sizeof(str), "%H:%M:%S", tmp) == 0)
         err(1, "strftime");
 
-    draw_text(str, -1, 0, cfont, fg);
+    draw_text(str, sw, 0, cfont, fg, 1);
 }
 
 static void
 draw_headline(char *str, int y) {
-    draw_text(str, 0, y, hfont, fg);
+    draw_text(str, 0, y, hfont, fg, 0);
 }
 
 static void
-draw_row(char *time, char *num, char *name, int y) {
-    draw_text(time, 0, y, rfont, fg);
-    draw_text(num, 4 * rfontsize, y, rfont, fg);
-    draw_text(name, 7 * rfontsize, y, rfont, fg);
+draw_row(departure *dep, int y) {
+    time_t now = time(NULL);
+    if(now == -1)
+        err(1, "time");
+
+    int dt = dep->arrival - now;
+
+    SDL_Color color = row_color(dt);
+
+    char time[8];
+    format_time(time, dt);
+    draw_text(time, 0, y, rfont, color, 0);
+
+    draw_text(dep->line, 8 * rfontsize, y, rfont, color, 1);
+    draw_text(dep->destination, 9 * rfontsize, y, rfont, color, 0);
 }
 
 static void
@@ -71,12 +143,13 @@ draw(void) {
     draw_clock();
 
     draw_headline("Mot sentrum", 0);
-    for(int y = hlineheight; y < sh / 2 - rlineheight; y += rlineheight)
-        draw_row("00:04", "3", "Mortensrud", y);
+
+    for(int i = 0, y = hlineheight; y < sh / 2 - rlineheight && i < anumdeps; y += rlineheight, ++i)
+        draw_row(&adeps[i], y);
 
     draw_headline("Fra sentrum", sh / 2);
-    for(int y = sh / 2 + hlineheight; y < sh - rlineheight; y += rlineheight)
-        draw_row("00:04", "3", "Mortensrud", y);
+    for(int i = 0, y = sh / 2 + hlineheight; y < sh - rlineheight && i < bnumdeps; y += rlineheight, ++i)
+        draw_row(&bdeps[i], y);
 
     SDL_Flip(screen);
 }
@@ -138,15 +211,19 @@ handle_events(void) {
 
 int
 main(int argc, char **argv) {
-    departure deps[100];
-    trafikanten_get_departures(deps, 100, "3010010");
-    return 0;
-
     font_init();
     screen_init();
 
+    int last_update = SDL_GetTicks();
+    update_rows();
+
     while(running) {
         int lastTick = SDL_GetTicks();
+
+        if(lastTick - last_update > update_interval * 1000) {
+            last_update = SDL_GetTicks();
+            update_rows();
+        }
 
         handle_events();
         draw();

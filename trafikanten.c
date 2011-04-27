@@ -42,7 +42,8 @@ http_get(http_buffer *buf, char *url) {
 }
 
 static void
-json_print_type(enum json_type type) {
+json_print_type(JSON *j) {
+    enum json_type type = json_object_get_type(j);
     printf("type: ");
 
     switch (type) {
@@ -70,34 +71,59 @@ json_print_type(enum json_type type) {
     }
 }
 
+static void
+json_get_string(char *dst, JSON *srcobj, char *key) {
+    JSON *srcent = json_object_object_get(srcobj, key);
+    char const *srcstr = json_object_get_string(srcent);
+
+    strcpy(dst, srcstr);
+
+    json_object_put(srcent);
+}
+
+static void
+json_get_int(int *dst, JSON *srcobj, char *key) {
+    JSON *srcent = json_object_object_get(srcobj, key);
+
+    *dst = json_object_get_int(srcent);
+
+    json_object_put(srcent);
+}
+
+static int
+json_get_time(time_t *dst, JSON *srcobj, char *key) {
+    JSON *srcent = json_object_object_get(srcobj, key);
+    char const *timestr = json_object_get_string(srcent);
+
+    long long int t;
+    sscanf(timestr, "/Date(%lld+0200)/", &t);
+    *dst = t / 1000;
+
+    json_object_put(srcent);
+}
+
 int
 trafikanten_get_departures(departure *deps, size_t maxdeps, char *id) {
-    //char url[256];
-    //sprintf(url, "http://api-test.trafikanten.no/RealTime/GetRealTimeData/%s", id);
-    char *url = "http://www.ping.uio.no/~mastensg/oslos.json";
+    char url[256];
+    sprintf(url, "http://api-test.trafikanten.no/RealTime/GetRealTimeData/%s", id);
 
     http_buffer buf;
     http_get(&buf, url);
 
-    struct json_object *j = json_tokener_parse(buf.data);
+    JSON *j = json_tokener_parse(buf.data);
 
+    int i;
     int n = json_object_array_length(j);
-    for(int i = 0; i < n; ++i) {
-        struct json_object *jdep = json_object_array_get_idx(j, i);
+    for(i = 0; i < n && i < maxdeps; ++i) {
+        JSON *jdep = json_object_array_get_idx(j, i);
 
-        struct json_object *jdest = json_object_object_get(jdep, "DestinationName");
-        struct json_object *jdeststr = json_object_get_string(jdest);
+        json_get_string(deps[i].destination, jdep, "DestinationName");
+        json_get_int(&deps[i].direction, jdep, "DirectionRef");
+        json_get_string(deps[i].line, jdep, "LineRef");
+        json_get_time(&deps[i].arrival, jdep, "ExpectedArrivalTime");
 
-        struct json_object *jline = json_object_object_get(jdep, "LineRef");
-        int jlineint = json_object_get_int(jline);
-
-        printf("%d %s\n", jlineint, jdeststr);
-
-        json_object_put(jdest);
-        json_object_put(jdeststr);
-        json_object_put(jline);
         json_object_put(jdep);
     }
 
-    return 0;
+    return i;
 }
