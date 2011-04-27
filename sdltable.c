@@ -3,10 +3,10 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include <curl/curl.h>
-
 #include <SDL/SDL.h>
 #include <SDL/SDL_ttf.h>
+
+#include "trafikanten.h"
 
 static int sw;
 static int sh;
@@ -25,23 +25,6 @@ static SDL_Surface *screen;
 static TTF_Font *cfont;
 static TTF_Font *hfont;
 static TTF_Font *rfont;
-
-static void
-handle_events(void) {
-    SDL_Event event;
-
-    while (SDL_PollEvent(&event)) {
-        switch (event.type) {
-        case SDL_KEYDOWN:
-            if (event.key.keysym.sym == SDLK_ESCAPE)
-                running = 0;
-
-            break;
-        default:
-            break;
-        }
-    }
-}
 
 static void
 draw_text(char *str, int x, int y, TTF_Font *font, SDL_Color color) {
@@ -99,12 +82,6 @@ draw(void) {
 }
 
 static void
-usage(void) {
-    printf("usage: sdltable width, height\n");
-    exit(EXIT_FAILURE);
-}
-
-static void
 font_init(void) {
     if(TTF_Init() == -1)
         err(1, "Could not initialize font library");
@@ -123,63 +100,50 @@ font_init(void) {
 }
 
 static void
-screen_init(int argc, char **argv) {
-    if(argc != 3)
-        usage();
+screen_init() {
+    SDL_Init(SDL_INIT_TIMER | SDL_INIT_VIDEO);
 
-    sw = atoi(argv[1]);
-    sh = atoi(argv[2]);
+    const SDL_VideoInfo *info = SDL_GetVideoInfo();
+    if(info == NULL)
+        err(1, "SDL_GetVideoInfo");
 
-    screen = SDL_SetVideoMode(sw, sh, 0, 0);
+    sw = info->current_w;
+    sh = info->current_h;
+
+    screen = SDL_SetVideoMode(sw, sh, 0, SDL_RESIZABLE);
     if(!screen)
         err(1, "Could not initialize screen");
 }
 
-typedef struct {
-    char data[65536];
-    size_t size;
-} lolbuffer;
-
-static size_t
-memory(void *ptr, size_t size, size_t nmemb, void *data) {
-    size_t realsize = nmemb * size;
-    lolbuffer *buf = (lolbuffer *)data;
-
-    if(buf->size + realsize > 65536)
-        err(1, "not enough lol");
-
-    memcpy(buf->data + buf->size, ptr, realsize);
-    buf->size += realsize;
-    buf->data[buf->size] = 0;
-
-    printf("lol: %d\n", realsize);
-
-    return realsize;
-}
-
 static void
-trafikanten_get(void) {
-    lolbuffer buf;
-    memset(&buf, 0, sizeof(lolbuffer));
+handle_events(void) {
+    SDL_Event event;
 
-    CURL *curl_handle = curl_easy_init();
-    curl_easy_setopt(curl_handle, CURLOPT_URL, "http://www.sis.trafikanten.no:8088/xmlrtpi/dis/request?DISID=SN$03010360");
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, memory);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)&buf);
-    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "lol/1337");
-    curl_easy_perform(curl_handle);
-    curl_easy_cleanup(curl_handle);
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+        case SDL_KEYDOWN:
+            if (event.key.keysym.sym == SDLK_ESCAPE)
+                running = 0;
 
-    puts(buf.data);
+            break;
+        case SDL_VIDEORESIZE:
+            sw = event.resize.w;
+            sh = event.resize.h;
+            break;
+        default:
+            break;
+        }
+    }
 }
 
 int
 main(int argc, char **argv) {
-    trafikanten_get();
+    departure deps[100];
+    trafikanten_get_departures(deps, 100, "3010010");
     return 0;
 
     font_init();
-    screen_init(argc, argv);
+    screen_init();
 
     while(running) {
         int lastTick = SDL_GetTicks();

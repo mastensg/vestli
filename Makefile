@@ -1,22 +1,31 @@
-CFLAGS  = -Wall -pedantic -std=c99 -g
-LDFLAGS = -lSDL -lSDL_ttf -lcurl
-BINARY  = sdltable
 VERSION = 0.1
+
+CFLAGS  = -Wall -pedantic -std=c99 -g
+LDFLAGS = -lSDL -lSDL_ttf -lcurl -ljson
+
 PREFIX  = /usr/local
-OBJECTS = $(BINARY).o
+BINARY  = sdltable
+BINPATH = $(PREFIX)/bin/
+
+MANSECT = 1
+MANPAGE = $(BINARY).$(MANSECT)
+MANBASE = $(PREFIX)/share/man/man$(MANSECT)
+MANPATH = $(MANBASE)/$(MANPAGE)
+
+$(BINARY): $(BINARY).o trafikanten.o
 
 all: $(BINARY)
 
 clean:
-	rm -f $(BINARY).o $(BINARY)
+	rm -f $(BINARY) *.o
 
 install: all
-	mkdir -p $(PREFIX)/bin
-	cp -f $(BINARY) $(PREFIX)/bin/$(BINARY)
-	chmod 755 $(PREFIX)/bin/$(BINARY)
-	mkdir -p $(PREFIX)/man/man1
-	sed "s/VERSION/$(VERSION)/g" < $(BINARY).1 > $(PREFIX)/man/man1/$(BINARY).1
-	chmod 644 $(PREFIX)/man/man1/$(BINARY).1
+	install -Ds $(BINARY) $(BINPATH)
+	install -D -m 644 $(MANPAGE) $(MANPATH)
+	sed -i "s/VERSION/$(VERSION)/g" $(MANPATH)
 
 uninstall:
-	rm -f $(BINARY) $(PREFIX)/bin/$(BINARY)
+	rm -f $(BINPATH)
+	rm -f $(MANPATH)
+
+.PHONY: all clean install uninstall
