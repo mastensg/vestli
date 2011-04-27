@@ -186,6 +186,8 @@ screen_init() {
     screen = SDL_SetVideoMode(sw, sh, 0, SDL_RESIZABLE);
     if(!screen)
         err(1, "Could not initialize screen");
+
+    SDL_ShowCursor(SDL_DISABLE);
 }
 
 static void
