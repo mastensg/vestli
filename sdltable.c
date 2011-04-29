@@ -34,6 +34,14 @@ static TTF_Font *cfont;
 static TTF_Font *hfont;
 static TTF_Font *rfont;
 
+static int
+depsort(const void *a, const void *b) {
+    departure *depa = (departure *) a;
+    departure *depb = (departure *) b;
+
+    return depa->arrival - depb->arrival;
+}
+
 static void
 update_rows(void) {
     //int numdeps = trafikanten_get_departures(deps, LENGTH(deps), "3010010");
