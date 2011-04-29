@@ -15,4 +15,4 @@ typedef struct {
     time_t arrival;
 } departure;
 
-int trafikanten_get_departures(departure *deps, size_t maxdeps, char *id);
+int trafikanten_get_departures(departure *deps, const size_t maxdeps, const char *id);

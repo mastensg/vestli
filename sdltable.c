@@ -34,16 +34,35 @@ static TTF_Font *cfont;
 static TTF_Font *hfont;
 static TTF_Font *rfont;
 
+static int
+depsort(const void *a, const void *b) {
+    departure *depa = (departure *) a;
+    departure *depb = (departure *) b;
+
+    return depa->arrival - depb->arrival;
+}
+
 static void
 update_rows(void) {
-    //int numdeps = trafikanten_get_departures(deps, LENGTH(deps), "3010010");
-    int numdeps = trafikanten_get_departures(deps, LENGTH(deps), "3010360");
-    if(numdeps == -1)
-        err(1, "trafikanten_get_departures");
+    departure *d = deps;
+    int totnumdeps = 0;
+
+    static const char *stations[] = {"3012323", "3010370", "3012322"};
+
+    for(int i = 0; i < LENGTH(stations); ++i) {
+        int n = trafikanten_get_departures(d, LENGTH(deps) - totnumdeps, stations[i]);
+        if(n == -1)
+            err(1, "trafikanten_get_departures");
+
+        d += n;
+        totnumdeps += n;
+    }
+
+    qsort(deps, totnumdeps, sizeof(departure), depsort);
 
     anumdeps = 0;
     bnumdeps = 0;
-    for(int i = 0; i < numdeps; ++i) {
+    for(int i = 0; i < totnumdeps; ++i) {
         if(deps[i].direction == 1)
             memcpy(&adeps[anumdeps++], &deps[i], sizeof(departure));
         else if(deps[i].direction == 2)
@@ -67,13 +86,13 @@ format_time(char *str, time_t dt) {
 
 static SDL_Color
 row_color(time_t dt) {
-    static const threshold = 20 * 60;
+    static const int threshold = 20 * 60;
 
     float h = 1. / 3;
     if(dt < threshold)
         h *= ((float)dt / threshold);
 
-    float r, g, b;
+    float r, g;
 
     if(h < 1. / 6) {
         r = 1;

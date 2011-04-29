@@ -96,14 +96,17 @@ json_get_time(time_t *dst, JSON *srcobj, char *key) {
     char const *timestr = json_object_get_string(srcent);
 
     long long int t;
-    sscanf(timestr, "/Date(%lld+0200)/", &t);
+    int z;
+    sscanf(timestr, "/Date(%lld+%04d)/", &t, &z);
     *dst = t / 1000;
 
     json_object_put(srcent);
+
+    return 0;
 }
 
 int
-trafikanten_get_departures(departure *deps, size_t maxdeps, char *id) {
+trafikanten_get_departures(departure *deps, const size_t maxdeps, const char *id) {
     char url[256];
     sprintf(url, "http://api-test.trafikanten.no/RealTime/GetRealTimeData/%s", id);
 
