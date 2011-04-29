@@ -44,14 +44,25 @@ depsort(const void *a, const void *b) {
 
 static void
 update_rows(void) {
-    //int numdeps = trafikanten_get_departures(deps, LENGTH(deps), "3010010");
-    int numdeps = trafikanten_get_departures(deps, LENGTH(deps), "3010360");
-    if(numdeps == -1)
-        err(1, "trafikanten_get_departures");
+    departure *d = deps;
+    int totnumdeps = 0;
+
+    static const char *stations[] = {"3012323", "3010370", "3012322"};
+
+    for(int i = 0; i < LENGTH(stations); ++i) {
+        int n = trafikanten_get_departures(d, LENGTH(deps) - totnumdeps, stations[i]);
+        if(n == -1)
+            err(1, "trafikanten_get_departures");
+
+        d += n;
+        totnumdeps += n;
+    }
+
+    qsort(deps, totnumdeps, sizeof(departure), depsort);
 
     anumdeps = 0;
     bnumdeps = 0;
-    for(int i = 0; i < numdeps; ++i) {
+    for(int i = 0; i < totnumdeps; ++i) {
         if(deps[i].direction == 1)
             memcpy(&adeps[anumdeps++], &deps[i], sizeof(departure));
         else if(deps[i].direction == 2)
