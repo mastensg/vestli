@@ -86,13 +86,13 @@ format_time(char *str, time_t dt) {
 
 static SDL_Color
 row_color(time_t dt) {
-    static const threshold = 20 * 60;
+    static const int threshold = 20 * 60;
 
     float h = 1. / 3;
     if(dt < threshold)
         h *= ((float)dt / threshold);
 
-    float r, g, b;
+    float r, g;
 
     if(h < 1. / 6) {
         r = 1;
