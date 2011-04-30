@@ -30,6 +30,8 @@ static int
 http_get(http_buffer *buf, char *url) {
     buf->size = 0;
 
+    sleep(1);
+
     CURL *curl_handle = curl_easy_init();
     curl_easy_setopt(curl_handle, CURLOPT_URL, url);
     curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, fill_buffer);
