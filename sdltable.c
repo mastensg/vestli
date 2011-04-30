@@ -112,7 +112,7 @@ row_color(time_t dt) {
 
 static void
 draw_text(char *str, int x, int y, TTF_Font *font, SDL_Color color, int rightalign) {
-    SDL_Surface *text = TTF_RenderText_Shaded(font, str, color, bg);
+    SDL_Surface *text = TTF_RenderUTF8_Shaded(font, str, color, bg);
 
     SDL_Rect pos = {x, y};
     if(rightalign)
@@ -165,7 +165,7 @@ draw(void) {
 
     draw_clock();
 
-    draw_headline("Mot sentrum", 0);
+    draw_headline("Mot sentrum Økern", 0);
 
     for(int i = 0, y = hlineheight; y < sh / 2 - rlineheight && i < anumdeps; y += rlineheight, ++i)
         draw_row(&adeps[i], y);
@@ -285,8 +285,7 @@ main(int argc, char **argv) {
         draw();
 
         int currentTick = SDL_GetTicks();
-        // 100 - ... to make ESC faster
-        int sleep = 100 - (currentTick - lastTick);
+        int sleep = 1000 - (currentTick - lastTick);
         if(sleep > 10)
             SDL_Delay(sleep);
     }
