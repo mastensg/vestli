@@ -165,7 +165,7 @@ draw(void) {
 
     draw_clock();
 
-    draw_headline("Mot sentrum Økern", 0);
+    draw_headline("Mot sentrum", 0);
 
     for(int i = 0, y = hlineheight; y < sh / 2 - rlineheight && i < anumdeps; y += rlineheight, ++i)
         draw_row(&adeps[i], y);
