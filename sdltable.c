@@ -14,13 +14,6 @@
 
 #define LENGTH(array) (sizeof(array) / sizeof(array[0]))
 
-static departure deps[256];
-static departure adeps[64];
-static departure bdeps[64];
-static int anumdeps;
-static int bnumdeps;
-static int sw;
-static int sh;
 static int running = 1;
 static const SDL_Color bg = {0, 0, 0, 255};
 static const SDL_Color fg = {255, 255, 255, 255};
@@ -37,6 +30,15 @@ static SDL_Surface *screen;
 static TTF_Font *cfont;
 static TTF_Font *hfont;
 static TTF_Font *rfont;
+static char stations[16][16];
+static int nstations;
+static departure deps[256];
+static departure adeps[64];
+static departure bdeps[64];
+static int anumdeps;
+static int bnumdeps;
+static int sw;
+static int sh;
 
 static int
 depsort(const void *a, const void *b) {
@@ -208,19 +210,19 @@ configure(const char *path) {
 static void
 font_init(void) {
     if(TTF_Init() == -1)
-        err(1, "Could not initialize font library");
+        err(1, "cannot initialize font library");
 
     cfont = TTF_OpenFont(fontpath, cfontsize);
     if(cfont == NULL)
-        err(1, "Could not load font \"%s\"", fontpath);
+        err(1, "cannot load font \"%s\"", fontpath);
 
     hfont = TTF_OpenFont(fontpath, hfontsize);
     if(hfont == NULL)
-        err(1, "Could not load font \"%s\"", fontpath);
+        err(1, "cannot load font \"%s\"", fontpath);
 
     rfont = TTF_OpenFont(fontpath, rfontsize);
     if(rfont == NULL)
-        err(1, "Could not load font \"%s\"", fontpath);
+        err(1, "cannot load font \"%s\"", fontpath);
 }
 
 static void
@@ -236,7 +238,7 @@ screen_init() {
 
     screen = SDL_SetVideoMode(sw, sh, 0, SDL_RESIZABLE);
     if(!screen)
-        err(1, "Could not initialize screen");
+        err(1, "cannot initialize screen");
 
     SDL_ShowCursor(SDL_DISABLE);
 }
