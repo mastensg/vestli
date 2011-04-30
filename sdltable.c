@@ -24,7 +24,7 @@ static const int hfontsize = 32;
 static const int hlineheight = 1.2 * 32;
 static const int rfontsize = 48;
 static const int rlineheight = 1.2 * 48;
-static const int update_interval = 5;
+static const int update_interval = 30;
 
 static SDL_Surface *screen;
 static TTF_Font *cfont;
