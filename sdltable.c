@@ -6,7 +6,11 @@
 #include <SDL/SDL.h>
 #include <SDL/SDL_ttf.h>
 
+#include <json/json.h>
+
 #include "trafikanten.h"
+
+#define MAX_CONF_SIZE 1024
 
 #define LENGTH(array) (sizeof(array) / sizeof(array[0]))
 
@@ -47,9 +51,7 @@ update_rows(void) {
     departure *d = deps;
     int totnumdeps = 0;
 
-    static const char *stations[] = {"3012323", "3010370", "3012322"};
-
-    for(int i = 0; i < LENGTH(stations); ++i) {
+    for(int i = 0; i < nstations; ++i) {
         int n = trafikanten_get_departures(d, LENGTH(deps) - totnumdeps, stations[i]);
         if(n == -1)
             err(1, "trafikanten_get_departures");
@@ -174,6 +176,36 @@ draw(void) {
 }
 
 static void
+configure(const char *path) {
+    FILE *f = fopen(path, "r");
+    if(f == NULL)
+        err(1, "cannot open configuration file \"%s\"", path);
+
+    char buf[MAX_CONF_SIZE + 1];
+    int nmemb = fread(buf, 1, MAX_CONF_SIZE, f);
+    if(ferror(f))
+        err(1, "cannot read configure file \"%s\"", path);
+    buf[nmemb] = 0;
+
+    int ret = fclose(f);
+    if(ret == -1)
+        err(1, "cannot close configure file \"%s\"", path);
+
+    JSON *j = json_tokener_parse(buf);
+    JSON *jstations = json_object_object_get(j, "Stations");
+
+    int n = json_object_array_length(jstations);
+    for(nstations = 0; nstations < n && nstations < LENGTH(stations); ++nstations) {
+        JSON *jstation = json_object_array_get_idx(jstations, nstations);
+
+        char const *station = json_object_get_string(jstation);
+        strcpy(stations[nstations], station);
+
+        json_object_put(jstation);
+    }
+}
+
+static void
 font_init(void) {
     if(TTF_Init() == -1)
         err(1, "Could not initialize font library");
@@ -232,6 +264,7 @@ handle_events(void) {
 
 int
 main(int argc, char **argv) {
+    configure("sdltable.conf");
     font_init();
     screen_init();
 
