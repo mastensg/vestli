@@ -1,1 +1,14 @@
-sdltable
+*.cache
+*.log
+*.o
+*.status
+*tar.gz
+/.deps
+/Makefile
+/Makefile.in
+/aclocal.m4
+/configure
+/depcomp
+/install-sh
+/missing
+vestli
