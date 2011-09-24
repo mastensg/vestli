@@ -1,4 +1,5 @@
 #include <err.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -17,20 +18,12 @@
 static int running = 1;
 static const SDL_Color bg = {0, 0, 0, 255};
 static const SDL_Color fg = {255, 255, 255, 255};
-static const char *fontpath = "DejaVuSans-Bold.ttf";
-static const int cfontsize = 32;
-static const int clineheight = 1.2 * 32;
-static const int hfontsize = 32;
-static const int hlineheight = 1.2 * 32;
-static const int rfontsize = 48;
-static const int rlineheight = 1.2 * 48;
 static const int update_interval = 30;
 
 static SDL_Surface *screen;
-static TTF_Font *cfont;
 static TTF_Font *hfont;
 static TTF_Font *rfont;
-static char stations[16][16];
+static char stations[64][64];
 static int nstations;
 static departure deps[256];
 static departure adeps[64];
@@ -39,6 +32,13 @@ static int anumdeps;
 static int bnumdeps;
 static int sw;
 static int sh;
+static char fontpath[256];
+static int hfontsize;
+static int hlineheight;
+static int rfontsize;
+static int rlineheight;
+static int marginleft;
+static int odinmode;
 
 static int
 depsort(const void *a, const void *b) {
@@ -85,7 +85,10 @@ format_time(char *str, time_t dt) {
     int minutes = dt / 60;
     int seconds = (dt - minutes) % 60;
 
-    sprintf(str, "%c%02d:%02d", sign, minutes, seconds);
+    if(odinmode)
+        sprintf(str, "%02d min", minutes);
+    else
+        sprintf(str, "%c%02d:%02d", sign, minutes, seconds);
 }
 
 static SDL_Color
@@ -133,12 +136,12 @@ draw_clock(void) {
     if(strftime(str, sizeof(str), "%H:%M:%S", tmp) == 0)
         err(1, "strftime");
 
-    draw_text(str, sw, 0, cfont, fg, 1);
+    draw_text(str, sw, 0, hfont, fg, 1);
 }
 
 static void
 draw_headline(char *str, int y) {
-    draw_text(str, 0, y, hfont, fg, 0);
+    draw_text(str, marginleft, y, hfont, fg, 0);
 }
 
 static void
@@ -153,10 +156,10 @@ draw_row(departure *dep, int y) {
 
     char time[8];
     format_time(time, dt);
-    draw_text(time, 0, y, rfont, color, 0);
+    draw_text(time, marginleft, y, rfont, color, 0);
 
-    draw_text(dep->line, 8 * rfontsize, y, rfont, color, 1);
-    draw_text(dep->destination, 9 * rfontsize, y, rfont, color, 0);
+    draw_text(dep->line, marginleft + 8 * rfontsize, y, rfont, color, 1);
+    draw_text(dep->destination, marginleft + 9 * rfontsize, y, rfont, color, 0);
 }
 
 static void
@@ -165,14 +168,25 @@ draw(void) {
 
     draw_clock();
 
-    draw_headline("Mot sentrum", 0);
+    time_t t = time(NULL);
 
-    for(int i = 0, y = hlineheight; y < sh / 2 - rlineheight && i < anumdeps; y += rlineheight, ++i)
+    draw_headline("Eastbound", 0);
+    for(int i = 0, y = hlineheight; y < sh / 2 - rlineheight && i < anumdeps; ++i) {
+        if(adeps[i].arrival - t < 60)
+            continue;
+
         draw_row(&adeps[i], y);
+        y += rlineheight;
+    }
 
-    draw_headline("Fra sentrum", sh / 2);
-    for(int i = 0, y = sh / 2 + hlineheight; y < sh - rlineheight && i < bnumdeps; y += rlineheight, ++i)
+    draw_headline("Westbound", sh / 2);
+    for(int i = 0, y = sh / 2 + hlineheight; y < sh - rlineheight && i < bnumdeps; ++i) {
+        if(bdeps[i].arrival - t < 60)
+            continue;
+
         draw_row(&bdeps[i], y);
+        y += rlineheight;
+    }
 
     SDL_Flip(screen);
 }
@@ -194,7 +208,45 @@ configure(const char *path) {
         err(1, "cannot close configure file \"%s\"", path);
 
     JSON *j = json_tokener_parse(buf);
+    if(j == NULL)
+        errx(1, "invalid configuration file");
+
+    JSON *jfontpath = json_object_object_get(j, "FontPath");
+    if(jfontpath == NULL)
+        errx(1, "invalid or no FontPath");
+    const char *tmpfontpath = json_object_get_string(jfontpath);
+    strcpy(fontpath, tmpfontpath);
+    json_object_put(jfontpath);
+
+    JSON *jhfontsize = json_object_object_get(j, "HeadFontSize");
+    if(jhfontsize == NULL)
+        errx(1, "invalid or no HeadFontSize");
+    hfontsize = json_object_get_int(jhfontsize);
+    hlineheight = 1.2 * hfontsize;
+    json_object_put(jhfontsize);
+
+    JSON *jrfontsize = json_object_object_get(j, "RowFontSize");
+    if(jrfontsize == NULL)
+        errx(1, "invalid or no RowFontSize");
+    rfontsize = json_object_get_int(jrfontsize);
+    rlineheight = 1.2 * rfontsize;
+    json_object_put(jrfontsize);
+
     JSON *jstations = json_object_object_get(j, "Stations");
+    if(jstations == NULL)
+        errx(1, "invalid or no Stations");
+
+    JSON *jmarginleft = json_object_object_get(j, "MarginLeft");
+    if(jmarginleft == NULL)
+        errx(1, "invalid or no MarginLeft");
+    marginleft = json_object_get_int(jmarginleft);
+    json_object_put(jmarginleft);
+
+    JSON *jodinmode = json_object_object_get(j, "OdinMode");
+    if(jodinmode == NULL)
+        errx(1, "invalid or no OdinMode");
+    odinmode = json_object_get_boolean(jodinmode);
+    json_object_put(jodinmode);
 
     int n = json_object_array_length(jstations);
     for(nstations = 0; nstations < n && nstations < LENGTH(stations); ++nstations) {
@@ -205,16 +257,14 @@ configure(const char *path) {
 
         json_object_put(jstation);
     }
+
+    json_object_put(j);
 }
 
 static void
 font_init(void) {
     if(TTF_Init() == -1)
         err(1, "cannot initialize font library");
-
-    cfont = TTF_OpenFont(fontpath, cfontsize);
-    if(cfont == NULL)
-        err(1, "cannot load font \"%s\"", fontpath);
 
     hfont = TTF_OpenFont(fontpath, hfontsize);
     if(hfont == NULL)
@@ -266,7 +316,12 @@ handle_events(void) {
 
 int
 main(int argc, char **argv) {
-    configure("sdltable.conf");
+    if(argc != 2) {
+        printf("usage: %s <configuration-file>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    configure(argv[1]);
     font_init();
     screen_init();
 

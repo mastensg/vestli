@@ -4,7 +4,7 @@ CFLAGS  = -Wall -pedantic -std=c99 -g
 LDFLAGS = -lSDL -lSDL_ttf -lcurl -ljson
 
 PREFIX  = /usr/local
-BINARY  = sdltable
+BINARY  = trafikanten-table
 BINPATH = $(PREFIX)/bin/
 
 MANSECT = 1
