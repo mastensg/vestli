@@ -1,4 +1,4 @@
-AM_CFLAGS = -Wall -Wextra -pedantic -std=c99
+AM_CFLAGS = -Wall -Wextra -pedantic -std=c99 -g
 
 bin_PROGRAMS = vestli
 
