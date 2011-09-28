@@ -9,8 +9,7 @@
 
 #include <curl/curl.h>
 
-#include <json/json.h>
-
+#include "json.h"
 #include "trafikanten.h"
 
 static size_t
@@ -47,91 +46,36 @@ http_get(http_buffer *buf, char *url) {
     return 0;
 }
 
-static void
-json_print_type(JSON *j) {
-    enum json_type type = json_object_get_type(j);
-    printf("type: ");
-
-    switch (type) {
-    case json_type_null:
-        printf("json_type_null\n");
-        break;
-    case json_type_boolean:
-        printf("json_type_boolean\n");
-        break;
-    case json_type_double:
-        printf("json_type_double\n");
-        break;
-    case json_type_int:
-        printf("json_type_int\n");
-        break;
-    case json_type_object:
-        printf("json_type_object\n");
-        break;
-    case json_type_array:
-        printf("json_type_array\n");
-        break;
-    case json_type_string:
-        printf("json_type_string\n");
-        break;
-    }
-}
-
-static void
-json_get_string(char *dst, JSON *srcobj, char *key) {
-    JSON *srcent = json_object_object_get(srcobj, key);
-    char const *srcstr = json_object_get_string(srcent);
-
-    strcpy(dst, srcstr);
-
-    json_object_put(srcent);
-}
-
-static void
-json_get_int(int *dst, JSON *srcobj, char *key) {
-    JSON *srcent = json_object_object_get(srcobj, key);
-
-    *dst = json_object_get_int(srcent);
-
-    json_object_put(srcent);
-}
-
-static int
-json_get_time(time_t *dst, JSON *srcobj, char *key) {
-    JSON *srcent = json_object_object_get(srcobj, key);
-    char const *timestr = json_object_get_string(srcent);
-
-    long long int t;
-    int z;
-    sscanf(timestr, "/Date(%lld+%04d)/", &t, &z);
-    *dst = t / 1000;
-
-    json_object_put(srcent);
-
-    return 0;
-}
-
 int
-trafikanten_get_departures(departure *deps, const size_t maxdeps, const char *id) {
+trafikanten_get_departures(departure *deps, const size_t maxdeps, const struct station *station) {
     char url[256];
-    sprintf(url, "http://api-test.trafikanten.no/RealTime/GetRealTimeData/%s", id);
+    sprintf(url, "http://api-test.trafikanten.no/RealTime/GetRealTimeData/%s", station->id);
 
     http_buffer buf;
     http_get(&buf, url);
 
-    JSON *j = json_tokener_parse(buf.data);
+    struct json_value *j = json_decode(buf.data);
 
-    int i;
-    int n = json_object_array_length(j);
-    for(i = 0; i < n && i < maxdeps; ++i) {
-        JSON *jdep = json_object_array_get_idx(j, i);
+    if (!j)
+        return 0;
 
-        json_get_string(deps[i].destination, jdep, "DestinationName");
-        json_get_int(&deps[i].direction, jdep, "DirectionRef");
-        json_get_string(deps[i].line, jdep, "LineRef");
-        json_get_time(&deps[i].arrival, jdep, "ExpectedArrivalTime");
+    int i = 0;
+    for(struct json_value *n = j->v.array; n && i < maxdeps; n = n->next, ++i) {
+        for(struct json_node *m = n->v.object; m; m = m->next) {
+            if(!strcmp(m->name, "DestinationName"))
+              strcpy(deps[i].destination, m->value->v.string);
+            else if(!strcmp(m->name, "DirectionRef"))
+              deps[i].direction = strtol(m->value->v.string, 0, 0);
+            else if(!strcmp(m->name, "LineRef"))
+              strcpy(deps[i].line, m->value->v.string);
+            else if(!strcmp(m->name, "ExpectedArrivalTime")) {
+                long long int t;
+                sscanf(m->value->v.string, "/Date(%lld+%*04d)/", &t);
+                deps[i].arrival = t / 1000;
+            }
 
-        json_object_put(jdep);
+            deps[i].station = station;
+        }
     }
 
     return i;

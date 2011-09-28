@@ -2,6 +2,7 @@
 #include "config.h"
 #endif
 
+#include <assert.h>
 #include <err.h>
 #include <errno.h>
 #include <stdio.h>
@@ -11,11 +12,13 @@
 #include <SDL/SDL.h>
 #include <SDL/SDL_ttf.h>
 
-#include <json/json.h>
-
+#include "json.h"
 #include "trafikanten.h"
 
 #define MAX_CONF_SIZE 1024
+#define DEFAULT_HFONTSIZE 48
+#define DEFAULT_RFONTSIZE 56
+#define DEFAULT_LINEHEIGHT_RATIO 12 / 10
 
 #define LENGTH(array) (sizeof(array) / sizeof(array[0]))
 
@@ -27,7 +30,7 @@ static const int update_interval = 30;
 static SDL_Surface *screen;
 static TTF_Font *hfont;
 static TTF_Font *rfont;
-static char stations[64][64];
+static struct station stations[64];
 static int nstations;
 static departure deps[256];
 static departure adeps[64];
@@ -37,10 +40,10 @@ static int bnumdeps;
 static int sw;
 static int sh;
 static char fontpath[256];
-static int hfontsize;
-static int hlineheight;
-static int rfontsize;
-static int rlineheight;
+static int hfontsize = DEFAULT_HFONTSIZE;
+static int hlineheight = DEFAULT_HFONTSIZE * DEFAULT_LINEHEIGHT_RATIO;
+static int rfontsize = DEFAULT_RFONTSIZE;
+static int rlineheight = DEFAULT_RFONTSIZE * DEFAULT_LINEHEIGHT_RATIO;
 static int marginleft;
 static int odinmode;
 
@@ -58,7 +61,7 @@ update_rows(void) {
     int totnumdeps = 0;
 
     for(int i = 0; i < nstations; ++i) {
-        int n = trafikanten_get_departures(d, LENGTH(deps) - totnumdeps, stations[i]);
+        int n = trafikanten_get_departures(d, LENGTH(deps) - totnumdeps, &stations[i]);
         if(n == -1)
             err(1, "trafikanten_get_departures");
 
@@ -72,36 +75,38 @@ update_rows(void) {
     bnumdeps = 0;
     for(int i = 0; i < totnumdeps; ++i) {
         if(deps[i].direction == 1)
-            memcpy(&adeps[anumdeps++], &deps[i], sizeof(departure));
+            adeps[anumdeps++] = deps[i];
         else if(deps[i].direction == 2)
-            memcpy(&bdeps[bnumdeps++], &deps[i], sizeof(departure));
+            bdeps[bnumdeps++] = deps[i];
+        else
+            assert(!"Invalid direction");
     }
 }
 
 static void
 format_time(char *str, time_t dt) {
-    char sign = '+';
-    if(dt < 0) {
-        sign = '-';
-        dt = -dt;
-    }
+    assert (dt >= 0);
 
     int minutes = dt / 60;
-    int seconds = (dt - minutes) % 60;
+    int seconds = dt % 60;
 
     if(odinmode)
-        sprintf(str, "%02d min", minutes);
+        sprintf(str, "%d min", minutes);
     else
-        sprintf(str, "%c%02d:%02d", sign, minutes, seconds);
+        sprintf(str, "%2d:%02d", minutes, seconds);
 }
 
 static SDL_Color
-row_color(time_t dt) {
-    static const int threshold = 20 * 60;
+row_color(time_t dt, time_t min_time) {
+    time_t max_time = 3 * min_time;
+
+    assert (dt >= min_time);
+    dt -= min_time;
 
     float h = 1. / 3;
-    if(dt < threshold)
-        h *= ((float)dt / threshold);
+
+    if(dt < max_time)
+        h *= ((float)dt / max_time);
 
     float r, g;
 
@@ -115,6 +120,18 @@ row_color(time_t dt) {
 
     SDL_Color c = {255 * r, 255 * g, 0};
     return c;
+}
+
+static int
+time_width(void) {
+    static int result = 0;
+    if(result)
+        return result;
+    SDL_Color dummy_color;
+    SDL_Surface *text = TTF_RenderUTF8_Shaded(rfont, "00:00", dummy_color, dummy_color);
+    result = text->w;
+    SDL_FreeSurface(text);
+    return result;
 }
 
 static void
@@ -156,11 +173,14 @@ draw_row(departure *dep, int y) {
 
     int dt = dep->arrival - now;
 
-    SDL_Color color = row_color(dt);
+    SDL_Color color = row_color(dt, dep->station->mintime);
 
     char time[8];
     format_time(time, dt);
-    draw_text(time, marginleft, y, rfont, color, 0);
+    if(odinmode)
+        draw_text(time, marginleft, y, rfont, color, 0);
+    else
+        draw_text(time, marginleft + time_width(), y, rfont, color, 1);
 
     draw_text(dep->line, marginleft + 8 * rfontsize, y, rfont, color, 1);
     draw_text(dep->destination, marginleft + 9 * rfontsize, y, rfont, color, 0);
@@ -176,7 +196,7 @@ draw(void) {
 
     draw_headline("Eastbound", 0);
     for(int i = 0, y = hlineheight; y < sh / 2 - rlineheight && i < anumdeps; ++i) {
-        if(adeps[i].arrival - t < 60)
+        if(adeps[i].arrival - t < adeps[i].station->mintime)
             continue;
 
         draw_row(&adeps[i], y);
@@ -185,7 +205,7 @@ draw(void) {
 
     draw_headline("Westbound", sh / 2);
     for(int i = 0, y = sh / 2 + hlineheight; y < sh - rlineheight && i < bnumdeps; ++i) {
-        if(bdeps[i].arrival - t < 60)
+        if(bdeps[i].arrival - t < bdeps[i].station->mintime)
             continue;
 
         draw_row(&bdeps[i], y);
@@ -211,58 +231,55 @@ configure(const char *path) {
     if(ret == -1)
         err(1, "cannot close configure file \"%s\"", path);
 
-    JSON *j = json_tokener_parse(buf);
+    struct json_value *j;
+
+    j = json_decode(buf);
     if(j == NULL)
-        errx(1, "invalid configuration file");
+        (errno ? err : errx)(1, "json_decode of \"%s\" failed", path);
 
-    JSON *jfontpath = json_object_object_get(j, "FontPath");
-    if(jfontpath == NULL)
-        errx(1, "invalid or no FontPath");
-    const char *tmpfontpath = json_object_get_string(jfontpath);
-    strcpy(fontpath, tmpfontpath);
-    json_object_put(jfontpath);
+    if(j->type != json_object)
+        errx(1, "\"%s\" is not a JSON object", path);
 
-    JSON *jhfontsize = json_object_object_get(j, "HeadFontSize");
-    if(jhfontsize == NULL)
-        errx(1, "invalid or no HeadFontSize");
-    hfontsize = json_object_get_int(jhfontsize);
-    hlineheight = 1.2 * hfontsize;
-    json_object_put(jhfontsize);
+    for(struct json_node *n = j->v.object; n; n = n->next) {
+        if(!strcmp(n->name, "FontPath") && n->value->type == json_string) {
+            strcpy(fontpath, n->value->v.string);
+        } else if(!strcmp(n->name, "HeadFontSize") && n->value->type == json_number) {
+            hfontsize = (int)n->value->v.number;
+            hlineheight = hfontsize * 12 / 10;
+        } else if(!strcmp(n->name, "RowFontSize") && n->value->type == json_number) {
+            rfontsize = (int)n->value->v.number;
+            rlineheight = rfontsize * 12 / 10;
+        } else if(!strcmp(n->name, "MarginLeft") && n->value->type == json_number) {
+            marginleft = (int)n->value->v.number;
+        } else if(!strcmp(n->name, "OdinMode") && n->value->type == json_boolean) {
+            odinmode = n->value->v.boolean;
+        } else if(!strcmp(n->name, "Stations") && n->value->type == json_array) {
+            for(struct json_value *jstation = n->value->v.array; jstation; jstation = jstation->next, ++nstations) {
+                struct station station;
+                if(jstation->type != json_object)
+                    errx(1, "station %d in \"%s\" is not a JSON object", nstations, path);
 
-    JSON *jrfontsize = json_object_object_get(j, "RowFontSize");
-    if(jrfontsize == NULL)
-        errx(1, "invalid or no RowFontSize");
-    rfontsize = json_object_get_int(jrfontsize);
-    rlineheight = 1.2 * rfontsize;
-    json_object_put(jrfontsize);
+                memset(&station, 0, sizeof(station));
 
-    JSON *jstations = json_object_object_get(j, "Stations");
-    if(jstations == NULL)
-        errx(1, "invalid or no Stations");
+                for(struct json_node *m = jstation->v.object; m; m = m->next) {
+                    if(!strcmp(m->name, "ID") && m->value->type == json_string)
+                        strncpy(station.id, m->value->v.string, sizeof(station.id));
+                    else if(!strcmp(m->name, "MinTime") && m->value->type == json_number)
+                        station.mintime = (int)m->value->v.number;
+                }
 
-    JSON *jmarginleft = json_object_object_get(j, "MarginLeft");
-    if(jmarginleft == NULL)
-        errx(1, "invalid or no MarginLeft");
-    marginleft = json_object_get_int(jmarginleft);
-    json_object_put(jmarginleft);
+                if(!station.id[0])
+                    errx(1, "missing ID for station %d in \"%s\"", nstations, path);
 
-    JSON *jodinmode = json_object_object_get(j, "OdinMode");
-    if(jodinmode == NULL)
-        errx(1, "invalid or no OdinMode");
-    odinmode = json_object_get_boolean(jodinmode);
-    json_object_put(jodinmode);
-
-    int n = json_object_array_length(jstations);
-    for(nstations = 0; nstations < n && nstations < LENGTH(stations); ++nstations) {
-        JSON *jstation = json_object_array_get_idx(jstations, nstations);
-
-        char const *station = json_object_get_string(jstation);
-        strcpy(stations[nstations], station);
-
-        json_object_put(jstation);
+                stations[nstations++] = station;
+            }
+        }
     }
 
-    json_object_put(j);
+    if (!fontpath[0])
+        errx(1, "missing FontPath in \"%s\"", path);
+
+    json_free(j);
 }
 
 static void

@@ -8,11 +8,17 @@ typedef struct {
     size_t size;
 } http_buffer;
 
+struct station {
+    char id[64];
+    unsigned int mintime;
+};
+
 typedef struct {
     char line[8];
     int direction;
     char destination[64];
     time_t arrival;
+    const struct station *station;
 } departure;
 
-int trafikanten_get_departures(departure *deps, const size_t maxdeps, const char *id);
+int trafikanten_get_departures(departure *deps, const size_t maxdeps, const struct station *station);
