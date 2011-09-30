@@ -166,11 +166,7 @@ draw_headline(char *str, int y) {
 }
 
 static void
-draw_row(departure *dep, int y) {
-    time_t now = time(NULL);
-    if(now == -1)
-        err(1, "time");
-
+draw_row(departure *dep, int y, time_t now) {
     int dt = dep->arrival - now;
 
     SDL_Color color = row_color(dt, dep->station->mintime);
@@ -199,7 +195,7 @@ draw(void) {
         if(adeps[i].arrival - t < adeps[i].station->mintime)
             continue;
 
-        draw_row(&adeps[i], y);
+        draw_row(&adeps[i], y, t);
         y += rlineheight;
     }
 
@@ -208,7 +204,7 @@ draw(void) {
         if(bdeps[i].arrival - t < bdeps[i].station->mintime)
             continue;
 
-        draw_row(&bdeps[i], y);
+        draw_row(&bdeps[i], y, t);
         y += rlineheight;
     }
 
