@@ -78,8 +78,6 @@ update_rows(void) {
             adeps[anumdeps++] = deps[i];
         else if(deps[i].direction == 2)
             bdeps[bnumdeps++] = deps[i];
-        else
-            assert(!"Invalid direction");
     }
 }
 
