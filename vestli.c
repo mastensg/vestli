@@ -5,9 +5,12 @@
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+
+#include <sys/time.h>
 
 #include <SDL/SDL.h>
 #include <SDL/SDL_ttf.h>
@@ -336,12 +339,28 @@ handle_events(void) {
     }
 }
 
+static int program_argc;
+static char **program_argv;
+
+void
+restart(int signal) {
+    char **argv = calloc(program_argc + 1, sizeof *argv);
+    memcpy(argv, program_argv, program_argc * sizeof *argv);
+
+    extern char **environ;
+    execve(BINDIR "/" PROGRAM_NAME, argv, environ);
+}
+
 int
 main(int argc, char **argv) {
     if(argc != 2) {
         printf("usage: %s <configuration-file>\n", argv[0]);
         return EXIT_FAILURE;
     }
+
+    program_argc = argc;
+    program_argv = argv;
+    signal(SIGHUP, restart);
 
     configure(argv[1]);
     font_init();
@@ -361,10 +380,10 @@ main(int argc, char **argv) {
         handle_events();
         draw();
 
-        int currentTick = SDL_GetTicks();
-        int sleep = 1000 - (currentTick - lastTick);
-        if(sleep > 10)
-            SDL_Delay(sleep);
+        struct timeval tv;
+        gettimeofday(&tv, 0);
+        tv.tv_sec = 0;
+        usleep(1000000 - tv.tv_usec);
     }
 
     SDL_Quit();
