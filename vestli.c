@@ -20,12 +20,12 @@
 #define DEFAULT_RFONTSIZE 56
 #define DEFAULT_LINEHEIGHT_RATIO 12 / 10
 
-#define LENGTH(array) (sizeof(array) / sizeof(array[0]))
+#define ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))
 
 static int running = 1;
 static const SDL_Color bg = {0, 0, 0, 255};
 static const SDL_Color fg = {255, 255, 255, 255};
-static const int update_interval = 30;
+static const int update_interval = 10;
 
 static SDL_Surface *screen;
 static TTF_Font *hfont;
@@ -57,23 +57,28 @@ depsort(const void *a, const void *b) {
 
 static void
 update_rows(void) {
-    departure *d = deps;
-    int totnumdeps = 0;
+    static int station = 0;
+    static int numdeps = 0;
 
-    for(int i = 0; i < nstations; ++i) {
-        int n = trafikanten_get_departures(d, LENGTH(deps) - totnumdeps, &stations[i]);
-        if(n == -1)
-            err(1, "trafikanten_get_departures");
-
-        d += n;
-        totnumdeps += n;
+    int i;
+    for(i = 0; i < numdeps;) {
+        if(deps[i].station == &stations[station])
+            deps[i] = deps[--numdeps];
+        else
+            ++i;
     }
 
-    qsort(deps, totnumdeps, sizeof(departure), depsort);
+    int n = trafikanten_get_departures(&deps[numdeps], ARRAY_SIZE(deps) - numdeps, &stations[station]);
+    if(n == -1)
+        err(1, "trafikanten_get_departures");
+
+    numdeps += n;
+
+    qsort(deps, numdeps, sizeof(departure), depsort);
 
     anumdeps = 0;
     bnumdeps = 0;
-    for(int i = 0; i < totnumdeps; ++i) {
+    for(int i = 0; i < numdeps; ++i) {
         if(deps[i].direction == 1)
             adeps[anumdeps++] = deps[i];
         else if(deps[i].direction == 2)
@@ -81,6 +86,8 @@ update_rows(void) {
         else
             assert(!"Invalid direction");
     }
+
+    station = (station + 1) % nstations;
 }
 
 static void
@@ -271,7 +278,7 @@ configure(const char *path) {
                 if(!station.id[0])
                     errx(1, "missing ID for station %d in \"%s\"", nstations, path);
 
-                stations[nstations++] = station;
+                stations[nstations] = station;
             }
         }
     }
