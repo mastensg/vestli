@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <err.h>
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -186,23 +187,23 @@ draw(void) {
 
     draw_clock();
 
-    time_t t = time(NULL);
+    time_t now = time(NULL);
 
     draw_headline("Eastbound", 0);
     for(int i = 0, y = hlineheight; y < sh / 2 - rlineheight && i < anumdeps; ++i) {
-        if(adeps[i].arrival - t < adeps[i].station->mintime)
+        if(adeps[i].arrival < now + adeps[i].station->mintime)
             continue;
 
-        draw_row(&adeps[i], y, t);
+        draw_row(&adeps[i], y, now);
         y += rlineheight;
     }
 
     draw_headline("Westbound", sh / 2);
     for(int i = 0, y = sh / 2 + hlineheight; y < sh - rlineheight && i < bnumdeps; ++i) {
-        if(bdeps[i].arrival - t < bdeps[i].station->mintime)
+        if(bdeps[i].arrival < now + bdeps[i].station->mintime)
             continue;
 
-        draw_row(&bdeps[i], y, t);
+        draw_row(&bdeps[i], y, now);
         y += rlineheight;
     }
 
@@ -322,6 +323,9 @@ handle_events(void) {
         case SDL_VIDEORESIZE:
             sw = event.resize.w;
             sh = event.resize.h;
+            break;
+        case SDL_QUIT:
+            exit (EXIT_SUCCESS);
             break;
         default:
             break;
