@@ -76,5 +76,7 @@ trafikanten_get_departures(departure *deps, const size_t maxdeps, const struct s
         }
     }
 
+    json_free(j);
+
     return i;
 }
