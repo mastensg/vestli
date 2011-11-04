@@ -57,7 +57,7 @@ trafikanten_get_departures(departure *deps, const size_t maxdeps, const struct s
     if (!j)
         return 0;
 
-    int i = 0;
+    size_t i = 0;
     for(struct json_value *n = j->v.array; n && i < maxdeps; n = n->next, ++i) {
         for(struct json_node *m = n->v.object; m; m = m->next) {
             if(!strcmp(m->name, "DestinationName"))
