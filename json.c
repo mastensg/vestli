@@ -35,6 +35,8 @@ json_decode_string (const char **input)
 
   o = result;
 
+  ch = 0;
+
   while (c != end)
     {
       switch (*c)
