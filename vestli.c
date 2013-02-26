@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 
 #include <sys/time.h>
 
@@ -347,6 +348,8 @@ static char **program_argv;
 
 void
 restart(int signal) {
+    signal = signal;
+
     char **argv = calloc(program_argc + 1, sizeof *argv);
     memcpy(argv, program_argv, program_argc * sizeof *argv);
 
