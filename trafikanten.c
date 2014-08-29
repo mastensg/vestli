@@ -47,7 +47,7 @@ http_get(http_buffer *buf, char *url) {
 int
 trafikanten_get_departures(departure *deps, const size_t maxdeps, const struct station *station) {
     char url[256];
-    sprintf(url, "http://api-test.trafikanten.no/RealTime/GetRealTimeData/%s", station->id);
+    sprintf(url, "http://reisapi.ruter.no/StopVisit/GetDepartures/%s", station->id);
 
     http_buffer buf;
     http_get(&buf, url);
@@ -58,18 +58,53 @@ trafikanten_get_departures(departure *deps, const size_t maxdeps, const struct s
         return 0;
 
     size_t i = 0;
-    for(struct json_value *n = j->v.array; n && i < maxdeps; n = n->next, ++i) {
-        for(struct json_node *m = n->v.object; m; m = m->next) {
-            if(!strcmp(m->name, "DestinationName"))
-              strcpy(deps[i].destination, m->value->v.string);
-            else if(!strcmp(m->name, "DirectionRef"))
-              deps[i].direction = strtol(m->value->v.string, 0, 0);
-            else if(!strcmp(m->name, "LineRef"))
-              strcpy(deps[i].line, m->value->v.string);
-            else if(!strcmp(m->name, "ExpectedArrivalTime")) {
-                long long int t;
-                sscanf(m->value->v.string, "/Date(%lld+%*04d)/", &t);
-                deps[i].arrival = t / 1000;
+    struct json_value *n;
+    struct json_node *m, *o, *p;
+
+    for (n = j->v.array; n && i < maxdeps; n = n->next, ++i)
+    {
+        puts("\n-----------\n\n");
+
+        for(m = n->v.object; m; m = m->next)
+        {
+            if(strcmp(m->name, "MonitoredVehicleJourney"))
+                continue;
+
+            for (o = m->value->v.object; o; o = o->next)
+            {
+                if(!strcmp(o->name, "DestinationName"))
+                {
+                    strcpy(deps[i].destination, o->value->v.string);
+                }
+                else if(!strcmp(o->name, "DirectionRef"))
+                {
+                    puts(o->name);
+                    puts(">>> hest");
+                    printf("%p\n", o->value);
+                    printf("%p\n", o->value->type);
+                    puts(o->value->v.string);
+                    deps[i].direction = strtol(o->value->v.string, 0, 0);
+                    puts(">>> hest");
+                }
+                else if(!strcmp(o->name, "LineRef"))
+                {
+                    strcpy(deps[i].line, o->value->v.string);
+                }
+                else if(!strcmp(o->name, "MonitoredCall"))
+                {
+                    for (p = o->value->v.object; p; p = p->next)
+                    {
+                        if(strcmp(m->name, "ExpectedArrivalTime"))
+                            continue;
+
+                        long long int t;
+                        puts(p->value->v.string);
+
+                        sscanf(m->value->v.string, "/Date(%lld+%*04d)/", &t);
+
+                        deps[i].arrival = t / 1000;
+                    }
+                }
             }
 
             deps[i].station = station;
